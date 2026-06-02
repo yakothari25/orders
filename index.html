@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <title>Quick Order App</title>
     <style>
         :root {
@@ -159,7 +160,12 @@
 <div class="app-container">
     <h2>New Order</h2>
     
-    <input type="text" id="searchInput" class="search-box" placeholder="Search items...">
+    <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <input type="text" id="searchInput" class="search-box" placeholder="Search items..." style="margin-bottom: 0;">
+        <button id="scanBtn" onclick="toggleScanner()" style="width: auto; padding: 0 16px; background-color: #475569;">📷 Scan</button>
+    </div>
+    
+    <div id="reader" style="display: none; width: 100%; border-radius: 8px; overflow: hidden; margin-bottom: 16px;"></div>
     <div id="loadingText">Loading items...</div>
     <ul id="itemList" class="item-list"></ul>
 
@@ -178,6 +184,65 @@
 </div>
 
 <script>
+
+    // --- BARCODE SCANNER LOGIC ---
+    let html5QrCode;
+
+    function toggleScanner() {
+        const readerDiv = document.getElementById('reader');
+        const scanBtn = document.getElementById('scanBtn');
+        
+        // If scanner is already open, close it
+        if (readerDiv.style.display === 'block') {
+            if (html5QrCode) {
+                html5QrCode.stop().then(() => {
+                    readerDiv.style.display = 'none';
+                    scanBtn.textContent = '📷 Scan';
+                }).catch(err => console.error(err));
+            }
+            return;
+        }
+
+        // Otherwise, open the scanner
+        readerDiv.style.display = 'block';
+        scanBtn.textContent = 'Close Camera';
+        
+        if (!html5QrCode) {
+            html5QrCode = new Html5Qrcode("reader");
+        }
+        
+        html5QrCode.start(
+            { facingMode: "environment" }, // Forces the rear camera on mobile
+            {
+                fps: 10,    // Scans 10 times per second
+                qrbox: { width: 250, height: 150 } // Creates a rectangular scanning box
+            },
+            (decodedText, decodedResult) => {
+                // 1. When a barcode is successfully scanned:
+                // Stop the camera
+                html5QrCode.stop().then(() => {
+                    readerDiv.style.display = 'none';
+                    scanBtn.textContent = '📷 Scan';
+                    
+                    // 2. Put the scanned barcode into the search box
+                    const searchInput = document.getElementById('searchInput');
+                    searchInput.value = decodedText;
+                    
+                    // 3. Force the app to run the search filter instantly
+                    searchInput.dispatchEvent(new Event('input'));
+                });
+            },
+            (errorMessage) => {
+                // Background scanning errors (safely ignore these)
+            }
+        ).catch((err) => {
+            console.error("Camera startup error:", err);
+            alert("Could not start camera. Please make sure you granted camera permissions to this website.");
+            readerDiv.style.display = 'none';
+            scanBtn.textContent = '📷 Scan';
+        });
+    }
+
     // --- CONFIGURATION ---
     // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE:
     const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwC6LhnIpbRjiCeJ2_wUsKH9vWPG5iowj7YHbFncyq0R9gI1BZNWUMw2SAhcsVQAh0o/exec';
