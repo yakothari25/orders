@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Order App</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text: #0f172a;
+            --border: #e2e8f0;
+            --success: #16a34a;
+        }
+        
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 480px; /* Mobile-first sizing */
+            background: var(--surface);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            padding: 24px;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+            margin-bottom: 16px;
+        }
+
+        .item-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .item-row {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+        }
+
+        .item-row:last-child {
+            border-bottom: none;
+        }
+
+        .item-row:hover, .item-row.selected {
+            background-color: #eff6ff;
+        }
+
+        .item-name {
+            font-weight: 500;
+        }
+
+        .item-price {
+            color: #64748b;
+            font-size: 0.9rem;
+        }
+
+        .order-section {
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 2px dashed var(--border);
+            display: none; /* Hidden until item is selected */
+        }
+
+        .quantity-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        input[type="number"] {
+            width: 80px;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:active {
+            opacity: 0.8;
+        }
+
+        button:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+            display: none;
+        }
+
+        .status-success {
+            background-color: #dcfce7;
+            color: var(--success);
+            display: block;
+        }
+        
+        .status-error {
+            background-color: #fee2e2;
+            color: #dc2626;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <h2>New Order</h2>
+    
+    <input type="text" id="searchInput" class="search-box" placeholder="Search items...">
+    <div id="loadingText">Loading items...</div>
+    <ul id="itemList" class="item-list"></ul>
+
+    <div id="orderSection" class="order-section">
+        <h3 id="selectedItemName">Selected Item</h3>
+        <p id="selectedItemPrice" class="item-price"></p>
+        
+        <div class="quantity-wrapper">
+            <label for="quantity">Quantity:</label>
+            <input type="number" id="quantity" min="1" value="1">
+        </div>
+
+        <button id="submitBtn" onclick="submitOrder()">Submit Order</button>
+        <div id="statusMessage" class="status-message"></div>
+    </div>
+</div>
+
+<script>
+    // --- CONFIGURATION ---
+    // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE:
+    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwC6LhnIpbRjiCeJ2_wUsKH9vWPG5iowj7YHbFncyq0R9gI1BZNWUMw2SAhcsVQAh0o/exec';
+
+    // --- STATE VARIABLES ---
+    let globalItems = [];
+    let selectedItem = null;
+
+    // --- INITIALIZATION ---
+    window.onload = () => {
+        fetchItems();
+        document.getElementById('searchInput').addEventListener('input', handleSearch);
+    };
+
+    // --- FETCH ITEMS VIA GET ---
+    async function fetchItems() {
+        try {
+            const response = await fetch(WEB_APP_URL);
+            const data = await response.json();
+            
+            if (data.success) {
+                globalItems = data.items;
+                document.getElementById('loadingText').style.display = 'none';
+                renderItems(globalItems);
+            } else {
+                showStatus('Failed to load items.', 'error');
+            }
+        } catch (error) {
+            document.getElementById('loadingText').textContent = "Network error. Make sure your Web App URL is correct.";
+            console.error('Error fetching items:', error);
+        }
+    }
+
+    // --- RENDER & FILTER LIST ---
+    function renderItems(itemsToRender) {
+        const listEl = document.getElementById('itemList');
+        listEl.innerHTML = ''; // Clear current list
+
+        itemsToRender.forEach(item => {
+            console.log(item)
+            const li = document.createElement('li');
+            li.className = 'item-row';
+            li.innerHTML = `
+                <span class="item-name">${item.NAME}</span>
+                <span class="item-price">${item.Itemcode}</span>
+            `;
+            li.onclick = () => selectItem(item, li);
+            listEl.appendChild(li);
+        });
+    }
+
+    //function handleSearch(e) {
+    //    const query = e.target.value.toLowerCase();
+    //    const filtered = globalItems.filter(item => 
+    //        item.NAME.toLowerCase().includes(query) || 
+    //        item.Itemcode.toLowerCase().includes(query)
+    //    );
+    //    renderItems(filtered);
+    //}
+
+function handleSearch(e) {
+        // Grab the search text and remove any accidental spaces at the end
+        const query = e.target.value.toLowerCase().trim();
+        
+        const filtered = globalItems.filter(item => {
+            // 1. Extract all data values for this item (ID, Name, Price)
+            // 2. Safely convert every single value into a lowercase string
+            const allItemData = Object.values(item).map(val => String(val || "").toLowerCase());
+            
+            // 3. Keep the item if ANY of its data columns contain the search query
+            return allItemData.some(text => text.includes(query));
+        });
+        
+        renderItems(filtered);
+    }
+
+    // --- SELECTION LOGIC ---
+    function selectItem(item, element) {
+        selectedItem = item;
+        
+        // Visual highlighting
+        document.querySelectorAll('.item-row').forEach(el => el.classList.remove('selected'));
+        element.classList.add('selected');
+
+        // Populate order section
+        document.getElementById('orderSection').style.display = 'block';
+        document.getElementById('selectedItemName').textContent = item.ItemName;
+        document.getElementById('selectedItemPrice').textContent = `Price: ₹${item.DefaultMrp} per unit`;
+        document.getElementById('quantity').value = 1; // Reset quantity
+        
+        // Clear old status messages
+        document.getElementById('statusMessage').className = 'status-message';
+    }
+
+    // --- SUBMIT ORDER VIA POST ---
+    async function submitOrder() {
+        const quantity = parseInt(document.getElementById('quantity').value);
+        
+        if (!selectedItem || isNaN(quantity) || quantity <= 0) {
+            showStatus('Please select a valid item and quantity.', 'error');
+            return;
+        }
+
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Processing...';
+        document.getElementById('statusMessage').className = 'status-message'; // clear old status
+        
+        const payload = {
+            itemId: selectedItem.Itemcode,
+            itemName: selectedItem.NAME,
+            unitPrice: selectedItem.DefaultMrp,
+            quantity: quantity
+        };
+        console.log(payload)
+        try {
+            // Using text/plain prevents strict CORS preflight issues with Apps Script
+            const response = await fetch(WEB_APP_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain', 
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showStatus(`Success! Order ${data.orderId} logged. Total: ₹${data.totalPrice}`, 'success');
+                // Reset form
+                document.getElementById('quantity').value = 1;
+            } else {
+                showStatus('Error logging order: ' + data.error, 'error');
+            }
+        } catch (error) {
+            showStatus('Network error while submitting order.', 'error');
+            console.error(error);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Order';
+        }
+    }
+
+    // --- UTILITIES ---
+    function showStatus(message, type) {
+        const statusEl = document.getElementById('statusMessage');
+        statusEl.textContent = message;
+        statusEl.className = `status-message status-${type}`;
+    }
+</script>
+
+</body>
+</html>
